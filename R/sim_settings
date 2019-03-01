@@ -1,1 +1,8 @@
 #simulation settings
+
+#setting 1-3
+n=300; p=10000; censoring rate=15%/25%/35%
+#setting 4-6
+n=500; p=10000; censoring rate=15%/25%/35%
+#setting 7-9
+n=1000; p=10000; censoring rate=15%/25%/35%
