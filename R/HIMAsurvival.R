@@ -1,42 +1,7 @@
 #High-dimensional Mediation Analysis for Survival Outcome
 # load R packages
-library(ncvreg)
 library(survival)
-
-# generate data
-#n=500            #sample size
-p=10000          #dimension of mediators
-alpha=rep(0,p)   #coefficients (mediator~exposure)
-beta=rep(0,p)    #coefficients (outcome~mediators)
-
-alpha[1:4] <- c(0.5,0.45,0.5,0.4)
-alpha[5:6] <- c(0.45,0.45)
-beta[1:4] <- c(0.55,0.6,0.65,0.7)
-beta[7:8] <- c(0.5,0.5)
-
-sim_data = function(n, p, alpha, beta){
-  X <- t(t(rbinom(n, 1, 0.6)))               #exposure
-  Z1 <- t(t(rbinom(n, 1, 0.3)))              #covariates Z1
-  theta1 <- c(rep(0.3,n))                    #coefficients(Z1-->M)
-  Z2 <- t(t(runif(n, 0, 1)))                 #covariates Z2
-  theta2 <- c(rep(0.2,n))                    #coefficients(Z2-->M)
-  Z <- cbind(Z1, Z2)
-  phi <- c(0.3, -0.2)                        #coefficients(covariates-->outcome)
-  ck <- t(runif(p, 0, 1))
-  M <- matrix(0, n, p)                       #mediators
-  for(i in 1:n){
-    e <- rnorm(p)
-    M[i,] <- ck+X[i]*alpha+Z[i,1]*theta1+Z[i,2]*theta2+e
-  }
-  colnames(M) <- paste0("M", 1:ncol(M))
-  haz <- 0.5*exp(0.5*X+0.3*Z[,1]-0.2*Z[,2]+0.55*M[,1]+0.6*M[,2]+0.65*M[,3]+0.7*M[,4]+0.5*M[,7]+0.5*M[,8])   #baseline hazard function lambda0 <- 0.5
-  ft <- rexp(n, haz)
-  ct <- rexp(n, 2.5)              #censoring time
-  time <- pmin(ft, ct)            #observed time
-  status <- as.numeric(ft <= ct)  #censoring indicator
-  Y <- survival::Surv(time, status)
-  return(list(haz=haz, Y=Y, M=M, X=X, COV=Z, status=status))
-}
+library(ncvreg)
 
 # SIS for alpha
 sis_alpha <- function(X, M, COV, p){
@@ -74,6 +39,7 @@ sis_beta <- function(X, M, Y, COV, p){
   return(s_beta = s_beta)
 }
 
+#main function
 hmas <- function(X, Y, M, COV,
                  penalty = c("MCP", "SCAD", "lasso"),
                  path = c('MY', 'MX'),
@@ -142,8 +108,8 @@ hmas <- function(X, Y, M, COV,
   
   if(verbose) cat("Non-zero", penalty, "beta estimate(s) of mediator(s) found: ", names(ID_p_non), "\n")
   
-  beta_p <- est[ID_p_non]  # The non-zero MCP estimators of \beta
-  ID_p <- ID_SIS[ID_p_non]  # The index of the ID of non-zero beta in the regression of Y= c + rX + b_1 M_1 + ...+ b_p M_p
+  beta_p <- est[ID_p_non]  # The non-zero MCP estimators of beta
+  ID_p <- ID_SIS[ID_p_non]  # The index of the ID of non-zero beta in the Cox regression
   MCP_M <- names(ID_p_non)
   
   
@@ -176,11 +142,6 @@ hmas <- function(X, Y, M, COV,
   
   ab_est <- alpha_est * beta_est   # the estimator of alpha*beta
   
-  # true alpha and beta
-  beta_t <- beta[ID_p]
-  alpha_t <- alpha[ID_p]
-  ab_true <- alpha_t * beta_t
-  
   # var(alpha*beta)
   var_ab <- (alpha_est^2) * var_beta + var_alpha * (beta_est^2)
   
@@ -204,7 +165,7 @@ hmas <- function(X, Y, M, COV,
   if(verbose) cat("Significant", "mediator(s) found: ", ID_t, "\n")
   
   results <- data.frame(alpha = alpha_est, beta = beta_est,
-                        `alpha_est*beta_est` = ab_est, `alpha_t*beta_t` = ab_true, 
+                        `alpha_est*beta_est` = ab_est, 
                         conf_low=conf_low, conf_up=conf_up, s.test=s.test, 
                         P_sobel=P_sobel, P_bon_sobel=P_bon_sobel, P_fdr_sobel=P_fdr_sobel,
                         var_ab=var_ab, var_alpha=var_alpha, var_beta=var_beta,
@@ -216,11 +177,5 @@ hmas <- function(X, Y, M, COV,
   return(list(C_M, MCP_M, ID_t, results))
 }
 
-#simulation for n=500, p=10000, mean censoring rate about 25%
-result5_n<-list() 
-for(i in 1:500){
-  set.seed(100*i)
-  simdat<-sim_data(n=500,p=10000,alpha = alpha,beta = beta)
-  hmas.fit_M <- hmas(X=simdat$X, Y=simdat$Y, M=simdat$M, COV=simdat$COV, verbose=TRUE) 
-  result5_n[[i]]<- hmas.fit_M
-}
+#run the model
+hmas.fit_M <- hmas(X=X, Y=Y, M=M, COV=COV, path='MX', verbose=TRUE) 
