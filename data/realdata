@@ -1,2 +1,3 @@
 #Real data is from https://xenabrowser.net/
-#The data set contains DNA Methylation data and clinical data of the patients
+#The data set contains DNA Methylation data(sample size of 907 for 450k) and clinical data of the patients
+#We choose 754 patients
