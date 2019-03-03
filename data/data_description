@@ -1,0 +1,5 @@
+#sample_id
+#the total sample_id of the patients we selected for analysis
+
+#Methylation754_col.RData
+#the colnames for the total DNA Methylation (mediators) 
