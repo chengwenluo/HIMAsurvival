@@ -17,7 +17,7 @@ sis_alpha <- function(X, M, COV, p){
     s_alpha[2,j] <- summary(fit)$coef[2]           #coefficients for alpha
     s_alpha[3,j] <- summary(fit)$coef[2,4]         #p-value for alpha
   }
-  colnames(s_alpha) = paste0("M", 1:ncol(M))
+  colnames(s_alpha) = colnames(M)
   return(s_alpha = s_alpha)
 }
 
@@ -35,7 +35,7 @@ sis_beta <- function(X, M, Y, COV, p){
     s_beta[2,j] <- summary(fit)$coef[1]           #coefficients for beta
     s_beta[3,j] <- summary(fit)$coef[1,5]         #p-value for beta
   }
-  colnames(s_beta) = paste0("M", 1:ncol(M))
+  colnames(s_beta) = colnames(M)
   return(s_beta = s_beta)
 }
 
@@ -64,7 +64,11 @@ hmas <- function(X, Y, M, COV,
   if(verbose) message("Step 1: Prelimenary Screening...", "     (", Sys.time(), ")")
   
   if (path == 'MY'){
-    margcoef <- abs(cor(M, Y[, 1]))
+    #sis_beta <- sis_beta(X, M, Y, COV, p)  #conditional coefficients
+    #s_beta <- sis_beta[3,]
+    #p_beta <- sort(s_beta)
+    #ID_SIS <- which(s_beta <= p_beta[d])       #the index of top d mediators
+    margcoef <- abs(cor(M, Y[, 1])) #marginal coefficients
     rownames(margcoef) <- paste0('M', 1:ncol(M))
     margcoef_sort <- sort(margcoef, decreasing=T)
     ID_SIS <- which(margcoef >= margcoef_sort[d])      #the index of top d mediators (Y~M)
@@ -117,14 +121,20 @@ hmas <- function(X, Y, M, COV,
                       "     (", Sys.time(), ")")
   
   if (path == 'MY'){
-    sis_alpha <- sis_alpha(X, M, COV, p)
-    alpha_s <- sis_alpha[, ID_p]
+    sub_M <- M[, MCP_M]
+    sis_alpha <- sis_alpha(X, sub_M, COV, ncol(sub_M))
+    alpha_s <- sis_alpha[, MCP_M]
   }else{
     alpha_s <- alpha_s[, ID_p]
   }
   
   alpha_est <- alpha_s[2, ]   #  the estimator for alpha
   var_alpha <- alpha_s[1, ]
+  
+  # true alpha and beta
+  beta_t <- beta[ID_p]
+  alpha_t <- alpha[ID_p]
+  ab_true <- alpha_t * beta_t
   
   if (is.null(COV)) {
     YMX <- data.frame(Y = Y, M[, ID_p, drop = FALSE], X = X)
@@ -154,28 +164,34 @@ hmas <- function(X, Y, M, COV,
   P_sobel <- 2 * (1-pnorm(s.test))     #p-value of sobel test
   P_bon_sobel <- p.adjust(P_sobel, 'bonferroni', length(ID_p)) #Bonferroni adjusted p-value
   P_bon_sobel[P_bon_sobel > 1] <- 1
-  P_fdr_sobel <- p.adjust(P_sobel, 'fdr', length(ID_p)) #FDR adjusted p-value
+  P_fdr_sobel <- p.adjust(P_sobel, 'fdr', length(ID_p))
   P_fdr_sobel[P_fdr_sobel > 1] <- 1
-  Pf_sobel <- as.matrix(P_fdr_sobel)
-  rownames(Pf_sobel) <- paste0('M',ID_p)
-  ID.a <- rownames(Pf_sobel)
-  ID_test <- which(Pf_sobel < 0.05)
-  ID_t <- ID.a[ID_test]
   
-  if(verbose) cat("Significant", "mediator(s) found: ", ID_t, "\n")
+  #joint test for alpha*beta
+  P_bon_alpha <- length(ID_p) * sis_alpha[3, MCP_M]  # The adjusted p-value for alpha (bonferroni)
+  P_bon_alpha[P_bon_alpha > 1] <- 1
+  P_fdr_alpha <- p.adjust(sis_alpha[3, MCP_M], 'fdr', length(ID_p))  # The adjusted p-value for alpha (bonferroni)
+  P_fdr_alpha[P_fdr_alpha > 1] <- 1
+  P_bon_beta <- length(ID_p) * summary(cox_model)$coefficients[1:length(ID_p), 5]  # The adjused p-value for beta
+  P_bon_beta[P_bon_beta > 1] <- 1
+  P_fdr_beta <- p.adjust(summary(cox_model)$coefficients[1:length(ID_p), 5], 'fdr', length(ID_p))  # The adjusted p-value for alpha (bonferroni)
+  P_fdr_beta[P_fdr_beta > 1] <- 1
+  PB <- rbind(P_bon_beta, P_bon_alpha)
+  P_bon_joint <- apply(PB, 2, max)
+  PF <- rbind(P_fdr_beta, P_fdr_alpha)
+  P_fdr_joint <- apply(PF, 2, max)
   
   results <- data.frame(alpha = alpha_est, beta = beta_est,
-                        `alpha_est*beta_est` = ab_est, 
-                        conf_low=conf_low, conf_up=conf_up, s.test=s.test, 
-                        P_sobel=P_sobel, P_bon_sobel=P_bon_sobel, P_fdr_sobel=P_fdr_sobel,
+                        `alpha_est*beta_est` = ab_est, `alpha_t*beta_t` = ab_true, 
+                        conf_low=conf_low, conf_up=conf_up,
+                        P_bon_sobel=P_bon_sobel, P_fdr_sobel=P_fdr_sobel,
+                        P_bon_joint=P_bon_joint, P_fdr_joint=P_fdr_joint,
                         var_ab=var_ab, var_alpha=var_alpha, var_beta=var_beta,
                         DE, check.names = FALSE)
-  
+ 
   
   if(verbose) message("Done!", "     (", Sys.time(), ")")
   
-  return(list(C_M, MCP_M, ID_t, results))
+  return(list(C_M, MCP_M, results))
 }
 
-#run the model
-hmas.fit_M <- hmas(X=X, Y=Y, M=M, COV=COV, path='MX', verbose=TRUE) 
