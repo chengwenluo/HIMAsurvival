@@ -40,7 +40,7 @@ sis_beta <- function(X, M, Y, COV, p){
 }
 
 #main function
-hmas <- function(X, Y, M, COV,
+hmas <- function(X, Y, M, COV,k,
                  penalty = c("MCP", "SCAD", "lasso"),
                  path = c('MY', 'MX'),
                  topN = NULL,
@@ -53,9 +53,9 @@ hmas <- function(X, Y, M, COV,
   
   if (is.null(topN)) {
     if (path == 'MY'){
-      d <- ceiling(n/log(n))  #the top d mediators that associated with outcome
+      d <- ceiling(k*n/log(n))  #the top d mediators that associated with outcome
     }else{
-      d <- ceiling(3*n/log(n)) ##the top d mediators that associated with exposure
+      d <- ceiling(k*n/log(n)) ##the top d mediators that associated with exposure
     }
   } else {
     d <- topN  
