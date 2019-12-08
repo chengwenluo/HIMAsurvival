@@ -53,9 +53,9 @@ hmas <- function(X, Y, M, COV,
   
   if (is.null(topN)) {
     if (path == 'MY'){
-      d <- ceiling(2*n/log(n))  #the top d mediators that associated with exposure
+      d <- ceiling(n/log(n))  #the top d mediators that associated with outcome
     }else{
-      d <- ceiling(3*n/log(n))
+      d <- ceiling(3*n/log(n)) ##the top d mediators that associated with exposure
     }
   } else {
     d <- topN  
@@ -64,17 +64,13 @@ hmas <- function(X, Y, M, COV,
   if(verbose) message("Step 1: Prelimenary Screening...", "     (", Sys.time(), ")")
   
   if (path == 'MY'){
-    #sis_beta <- sis_beta(X, M, Y, COV, p)  #conditional coefficients
-    #s_beta <- sis_beta[3,]
-    #p_beta <- sort(s_beta)
-    #ID_SIS <- which(s_beta <= p_beta[d])       #the index of top d mediators
-    margcoef <- abs(cor(M, Y[, 1])) #marginal coefficients
-    rownames(margcoef) <- paste0('M', 1:ncol(M))
-    margcoef_sort <- sort(margcoef, decreasing=T)
-    ID_SIS <- which(margcoef >= margcoef_sort[d])      #the index of top d mediators (Y~M)
+    sis_beta <- sis_beta(X, M, Y, COV, p)  #conditional coefficients
+    s_beta <- sis_beta[3,]
+    p_beta <- sort(s_beta)
+    ID_SIS <- which(s_beta <= p_beta[d])       #the same with largest coefficients after standardization
   }else{
     alpha_s <- sis_alpha(X, M, COV, p)
-    SIS_alpha <- alpha_s[2,]
+    SIS_alpha <- alpha_s[3,]
     SIS_alpha_sort <- sort(SIS_alpha)
     ID_SIS <- which(SIS_alpha <= SIS_alpha_sort[d])  # the index of top d significant mediators (M~X)
   }
@@ -107,7 +103,7 @@ hmas <- function(X, Y, M, COV,
   lam <- fit$lambda[which.min(BIC(fit))]
   if(verbose) cat("lambda selected: ", lam, "\n")
   Coefficients <- coef(fit, lambda = lam)
-  est <- Coefficients[1:d]
+  est <- Coefficients[1:length(ID_SIS)]
   ID_p_non <- which(est != 0)
   
   if(verbose) cat("Non-zero", penalty, "beta estimate(s) of mediator(s) found: ", names(ID_p_non), "\n")
