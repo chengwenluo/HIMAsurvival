@@ -22,21 +22,19 @@ sis_alpha <- function(X, M, COV, p){
 }
 
 # SIS for beta
-sis_beta <- function(X, M, Y, COV, p){
-  s_beta <- matrix(0, 3, p)
+sis_beta <- function(X,M,Y,COV,p){
+  p_cor = matrix(0,p,1)
   for(j in 1:p){
-    if (is.null(COV)) {
-      YMX <- data.frame(Y = Y, M = M[, j], X = X)
-    } else {
-      YMX <- data.frame(Y = Y, M = M[, j], X = X, COV = COV)
+    if(is.null(COV)){
+      d=data.frame(Y=Y[,1], M=M[,j], X=X)
+      p_cor[j,] <- pcor(c(1,2,3),cov(d, method='spearman'))  #method of correlation
+    }else{
+      d=data.frame(Y=Y[,1], M=M[,j], X=X, COV=COV)
+      p_cor[j,] <- pcor(c(1,2,3,4,5), cov(d, method='spearman'))
     }
-    fit <- coxph(Y ~., data = YMX)
-    s_beta[1,j] <- fit$var[1,1]                   #var for beta
-    s_beta[2,j] <- summary(fit)$coef[1]           #coefficients for beta
-    s_beta[3,j] <- summary(fit)$coef[1,5]         #p-value for beta
   }
-  colnames(s_beta) = colnames(M)
-  return(s_beta = s_beta)
+  rownames(p_cor) = colnames(M)
+  return(p_cor = p_cor)
 }
 
 #main function
@@ -64,10 +62,11 @@ hmas <- function(X, Y, M, COV,k,
   if(verbose) message("Step 1: Prelimenary Screening...", "     (", Sys.time(), ")")
   
   if (path == 'MY'){
-    sis_beta <- sis_beta(X, M, Y, COV, p)  #conditional coefficients
-    s_beta <- sis_beta[3,]
-    p_beta <- sort(s_beta)
-    ID_SIS <- which(s_beta <= p_beta[d])       #the same with largest coefficients after standardization
+    cor <- sis_beta(X=X, M=M, Y=Y, COV=COV, p=ncol(M))
+    cor <- abs(cor)
+    rownames(cor)=paste0('M', 1:ncol(M))
+    cor_sort <- sort(cor, decreasing=T)
+    ID_SIS <- which(cor >= cor_sort[d])    
   }else{
     alpha_s <- sis_alpha(X, M, COV, p)
     SIS_alpha <- alpha_s[3,]
@@ -80,7 +79,7 @@ hmas <- function(X, Y, M, COV,k,
   if(verbose) cat("Top", length(ID_SIS), "mediators selected (ranked from most to least significant): ", colnames(M_SIS), "\n")
   
   XM <- cbind(M_SIS, X)
-  C_M<-colnames(XM)
+  C_M < -colnames(XM)
   
   
   if(verbose) message("Step 2: Penalized Variable Selection (", penalty, ") ...", "   s  (", 
