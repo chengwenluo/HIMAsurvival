@@ -1,36 +1,59 @@
-#High-dimensional Mediation Analysis for Survival Outcome
+#High-dimensional Mediation Analysis in Survival Models
 # load R packages
 library(survival)
 library(ncvreg)
+library(ggm)
 
 # SIS for alpha
 sis_alpha <- function(X, M, COV, p){
-  s_alpha <- matrix(0, 3, p)
-  for(j in 1:p){
+  s_alpha <- function(j){
     if (is.null(COV)) {
       MX <- data.frame(M = M[, j], X = X)
     } else {
       MX <- data.frame(M = M[, j], X = X, COV = COV)
     }
     fit <- glm(M ~., data = MX)
-    s_alpha[1,j] <- summary(fit)$cov.scaled[2,2]   #var for alpha
-    s_alpha[2,j] <- summary(fit)$coef[2]           #coefficients for alpha
-    s_alpha[3,j] <- summary(fit)$coef[2,4]         #p-value for alpha
+    s1 <- summary(fit)$cov.scaled[2,2]   #var for alpha
+    s2 <- summary(fit)$coef[2]           #coefficients for alpha
+    s3 <- summary(fit)$coef[2,4]         #p-value for alpha
+    return(data.frame(s_var=s1, s_coef=s2, s_p=s3))
   }
-  colnames(s_alpha) = colnames(M)
-  return(s_alpha = s_alpha)
+  dat=data.frame(do.call(rbind, lapply(1:ncol(M), s_alpha)))
+  alpha_sis <- t(dat)
+  colnames(alpha_sis) = colnames(M)
+  return(s_alpha=alpha_sis)
 }
 
-# SIS for beta
-sis_beta <- function(X,M,Y,COV,p){
+# SIS for beta (the regression Y~X+M)
+sis_beta1 <- function(X, M, Y, COV, p){
+  s_beta <- function(j){
+    if (is.null(COV)) {
+      MX <- data.frame(Y=Y, M = M[, j], X = X)
+    } else {
+      MX <- data.frame(Y=Y, M = M[, j], X = X, COV = COV)
+    }
+    fit <- coxph(Y ~., data = MX)
+    s1 <- fit$var[1,1]                   #var for alpha
+    s2 <- summary(fit)$coef[1]           #coefficients for alpha
+    s3 <- summary(fit)$coef[1,5]         #p-value for alpha
+    return(data.frame(s_var=s1, s_coef=s2, s_p=s3))
+  }
+  dat=data.frame(do.call(rbind, lapply(1:ncol(M), s_beta)))
+  beta_sis <- t(dat)
+  colnames(beta_sis) = colnames(M)
+  return(s_beta=beta_sis)
+}
+
+# SIS for beta (pcor for M and Y)
+sis_beta2 <- function(X,M,Y,COV,p){
   p_cor = matrix(0,p,1)
   for(j in 1:p){
     if(is.null(COV)){
       d=data.frame(Y=Y[,1], M=M[,j], X=X)
       p_cor[j,] <- pcor(c(1,2,3),cov(d, method='spearman'))  #method of correlation
     }else{
-      d=data.frame(Y=Y[,1], M=M[,j], X=X, COV=COV)
-      p_cor[j,] <- pcor(c(1,2,3,4,5), cov(d, method='spearman'))
+      d=data.frame(Y=Y[,1], M=M[,j], X=X, COV=COV)            
+      p_cor[j,] <- pcor(c(1,2,3,4,5), cov(d, method='spearman'))  #with 2 covariates
     }
   }
   rownames(p_cor) = colnames(M)
@@ -38,7 +61,7 @@ sis_beta <- function(X,M,Y,COV,p){
 }
 
 #main function
-hmas <- function(X, Y, M, COV,k,
+hmas <- function(X, Y, M, COV, k,
                  penalty = c("MCP", "SCAD", "lasso"),
                  path = c('MY', 'MX'),
                  topN = NULL,
@@ -51,9 +74,9 @@ hmas <- function(X, Y, M, COV,k,
   
   if (is.null(topN)) {
     if (path == 'MY'){
-      d <- ceiling(k*n/log(n))  #the top d mediators that associated with outcome
+      d <- ceiling(k*n/log(n))  #the top d mediators that associated with outcome, k=2
     }else{
-      d <- ceiling(k*n/log(n)) ##the top d mediators that associated with exposure
+      d <- ceiling(k*n/log(n))  #the top d mediators that associated with exposure
     }
   } else {
     d <- topN  
@@ -62,10 +85,14 @@ hmas <- function(X, Y, M, COV,k,
   if(verbose) message("Step 1: Prelimenary Screening...", "     (", Sys.time(), ")")
   
   if (path == 'MY'){
-    cor <- sis_beta(X=X, M=M, Y=Y, COV=COV, p=ncol(M))
+    cor <- sis_beta2(X=X, M=M, Y=Y, COV=COV, p=ncol(M))
     cor <- abs(cor)
     rownames(cor)=paste0('M', 1:ncol(M))
     cor_sort <- sort(cor, decreasing=T)
+    #beta_s <- sis_beta1(X=X, M=M, Y=Y, COV=COV, p=ncol(M))
+    #SIS_beta <- beta_s[3,]
+    #SIS_beta_sort <- sort(SIS_beta)
+    #ID_SIS <- which(SIS_beta <= SIS_beta_sort[d])  # the index of top d significant mediators (Y~X+M)
     ID_SIS <- which(cor >= cor_sort[d])    
   }else{
     alpha_s <- sis_alpha(X, M, COV, p)
